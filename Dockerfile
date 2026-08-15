@@ -19,13 +19,13 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 FROM debian:bookworm-slim
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
+    apt-get install -y --no-install-recommends ca-certificates gosu && \
     rm -rf /var/lib/apt/lists/* && \
-    useradd --create-home --uid 10001 bot && \
+    useradd --create-home --uid 10001 --user-group bot && \
     install -d -o bot -g bot /app/data/uploads /app/lib
 COPY --from=builder /out/huginn-bot-api /app/huginn-bot-api
 COPY --from=builder /out/libhuginn_messenger.so /app/lib/libhuginn_messenger.so
-USER bot
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 WORKDIR /app
 ENV BOT_API_ADDR=:8081 \
     HUGINN_CORE_LIBRARY=/app/lib/libhuginn_messenger.so \
@@ -33,4 +33,5 @@ ENV BOT_API_ADDR=:8081 \
     BOT_API_UPLOAD_DIR=/app/data/uploads
 EXPOSE 8081
 VOLUME ["/app/data"]
-ENTRYPOINT ["/app/huginn-bot-api"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["/app/huginn-bot-api"]
