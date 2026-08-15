@@ -1,0 +1,19 @@
+services:
+  bot-api:
+    build: .
+    restart: unless-stopped
+    environment:
+      BOT_API_TOKEN: ${BOT_API_TOKEN:?set BOT_API_TOKEN}
+      HUGINN_USERNAME: ${HUGINN_USERNAME:?set HUGINN_USERNAME}
+      MUNINN_ADDR: ${MUNINN_ADDR:-https://muninn.evil-bread.ru}
+      HUGINN_CHUNK_TTL: ${HUGINN_CHUNK_TTL:-1w}
+      HUGINN_TURN_ADDR: ${HUGINN_TURN_ADDR:-}
+      HUGINN_TURN_USER: ${HUGINN_TURN_USER:-}
+      HUGINN_TURN_PASS: ${HUGINN_TURN_PASS:-}
+    ports:
+      - "${BOT_API_PORT:-8081}:8081"
+    volumes:
+      - bot-data:/app/data
+
+volumes:
+  bot-data:
