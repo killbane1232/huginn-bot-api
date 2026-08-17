@@ -1,6 +1,5 @@
 GO ?= go
-CORE_DIR := third_party/huginn-messenger
-CORE_LIBRARY := build/libhuginn_messenger.so
+CORE_DOWNLOADER := scripts/download-core-library.sh
 BOT_BINARY := build/huginn-bot-api
 
 .PHONY: all core bot test format clean
@@ -8,8 +7,7 @@ BOT_BINARY := build/huginn-bot-api
 all: core bot
 
 core:
-	mkdir -p build
-	cd $(CORE_DIR) && $(GO) build -ldflags='-checklinkname=0' -buildmode=c-shared -o ../../$(CORE_LIBRARY) .
+	HUGINN_CORE_OUTPUT_DIR=build $(CORE_DOWNLOADER)
 
 bot:
 	mkdir -p build

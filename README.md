@@ -7,25 +7,30 @@
 значение зафиксировано в коде и не переопределяется environment-переменными или
 ранее сохранённой конфигурацией.
 
-Ядро подключено в `third_party/huginn-messenger` как Git submodule. Bot API не
-импортирует его `internal`-пакеты: при сборке ядро превращается в shared library,
-а адаптер `internal/core` загружает через `dlopen` совместимый C ABI-вход с
-явным `peer_flag`.
+Ядро подключено как версионированная библиотечная зависимость из
+`core-library.version`, без Git submodule. При сборке скачивается готовая shared
+library из GitHub Release `github.com/killbane1232/huginn-messenger`, её архив
+проверяется по опубликованному `SHA256SUMS`, а адаптер `internal/core` загружает
+через `dlopen` совместимый C ABI-вход с явным `peer_flag`.
 
 ## Быстрый запуск
 
 ```bash
-git clone --recurse-submodules https://github.com/killbane1232/huginn-bot-api.git
+git clone https://github.com/killbane1232/huginn-bot-api.git
 cd huginn-bot-api
 cp .env.example .env
 # задайте BOT_API_TOKEN и HUGINN_USERNAME
 docker compose up --build
 ```
 
-Локальная сборка требует Go 1.25+, GCC и Linux:
+При запуске контейнер исправляет владельца persistent volume `/app/data`, а
+затем запускает Bot API от непривилегированного пользователя `bot` с UID
+`10001`. Это позволяет повторно использовать volume, ранее созданный с
+владельцем `root`, без удаления базы и ключей.
+
+Локальная сборка требует Go 1.25+, GCC, Linux и `curl`:
 
 ```bash
-git submodule update --init --recursive
 make all
 
 export BOT_API_TOKEN='replace-with-a-long-random-token'
@@ -109,6 +114,10 @@ curl -H "Authorization: Bearer $BOT_API_TOKEN" \
 | `HUGINN_TURN_USER` | пусто |
 | `HUGINN_TURN_PASS` | пусто |
 
+Если контейнер завершался с SQLite-ошибкой `unable to open database file (14)`,
+пересоберите и перезапустите его: `docker compose up -d --build`. Новый
+entrypoint восстановит права существующего `bot-data`; удалять volume не нужно.
+
 ## Разработка
 
 ```bash
@@ -118,10 +127,18 @@ make all
 git diff --check
 ```
 
-Обновление ядра выполняется отдельным изменением gitlink:
+## Docker image
+
+GitHub Actions workflow `.github/workflows/docker-publish.yml` проверяет Bot API,
+собирает библиотеку Go-ядра, затем собирает образ для `linux/amd64` и
+`linux/arm64`. На pull
+request выполняется только сборка. Push в `main`, version-тег `v*.*.*` или
+ручной запуск публикует образ в `ghcr.io/<owner>/<repository>` с тегами
+`latest` для основной ветки, версией для Git-тега и неизменяемым `sha-*`.
+
+Обновление ядра выполняется после публикации соответствующего GitHub Release:
 
 ```bash
-git -C third_party/huginn-messenger fetch origin
-git -C third_party/huginn-messenger checkout <tested-commit>
-git add third_party/huginn-messenger
+printf '%s\n' 'v0.2.0' > core-library.version
+make all
 ```

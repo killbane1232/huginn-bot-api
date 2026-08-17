@@ -2,14 +2,19 @@
 FROM golang:1.25-bookworm AS builder
 WORKDIR /src
 
-COPY third_party/huginn-messenger/go.mod third_party/huginn-messenger/go.sum ./third_party/huginn-messenger/
-RUN --mount=type=cache,target=/go/pkg/mod \
-    cd third_party/huginn-messenger && go mod download
-
-COPY third_party/huginn-messenger ./third_party/huginn-messenger
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    cd third_party/huginn-messenger && \
-    go build -ldflags='-checklinkname=0' -buildmode=c-shared -o /out/libhuginn_messenger.so .
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+COPY core-library.version ./
+COPY scripts/download-core-library.sh ./scripts/download-core-library.sh
+ARG TARGETARCH
+ARG HUGINN_CORE_VERSION
+ARG HUGINN_CORE_RELEASE_BASE
+RUN HUGINN_CORE_ARCH="$TARGETARCH" \
+    HUGINN_CORE_VERSION="$HUGINN_CORE_VERSION" \
+    HUGINN_CORE_RELEASE_BASE="$HUGINN_CORE_RELEASE_BASE" \
+    HUGINN_CORE_OUTPUT_DIR=/out \
+    ./scripts/download-core-library.sh
 
 COPY go.mod ./
 COPY cmd ./cmd

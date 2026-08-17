@@ -28,23 +28,20 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout repository and submodules
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
       - name: Test Bot API
         run: go test ./...
 
-      - name: Test Huginn core
-        working-directory: third_party/huginn-messenger
-        run: go test ./...
+      - name: Download Huginn core library
+        run: make core
 
   docker:
     name: Build Docker image
@@ -56,10 +53,8 @@ jobs:
       packages: write
 
     steps:
-      - name: Checkout repository and submodules
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

@@ -2,4 +2,3 @@
 .env
 build
 data
-third_party/huginn-messenger/.git
