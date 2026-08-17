@@ -24,6 +24,8 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      core-version: ${{ steps.core-version.outputs.version }}
     permissions:
       contents: read
 
@@ -40,7 +42,15 @@ jobs:
       - name: Test Bot API
         run: go test ./...
 
+      - name: Resolve latest Huginn core version
+        id: core-version
+        run: |
+          version="$(GOPROXY=https://proxy.golang.org,direct go list -m -f '{{.Version}}' github.com/killbane1232/huginn-messenger@latest)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Download Huginn core library
+        env:
+          HUGINN_CORE_VERSION: ${{ steps.core-version.outputs.version }}
         run: make core
 
   docker:
@@ -88,5 +98,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            HUGINN_CORE_VERSION=${{ needs.test.outputs.core-version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
