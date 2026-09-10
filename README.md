@@ -36,11 +36,13 @@ make all
 
 export BOT_API_TOKEN='replace-with-a-long-random-token'
 export HUGINN_USERNAME='weather-bot'
+export MUNINN_ADDR='https://your-muninn.example'
 ./build/huginn-bot-api
 ```
 
-По умолчанию сервис слушает `:8081`, подключается к
-`https://muninn.evil-bread.ru` и хранит состояние в `data/`. Для production
+По умолчанию сервис слушает `:8081` и хранит состояние в `data/`.
+Адрес Muninn обязателен в `MUNINN_ADDR` и имеет приоритет над ранее
+сохранённым адресом в базе ядра; при смене ENV перезапустите бот. Для production
 следует использовать HTTPS reverse proxy и не передавать токен в query string.
 
 ## Авторизация
@@ -65,6 +67,11 @@ Authorization: Bearer <BOT_API_TOKEN>
 | `POST` | `/api/v1/groups` | Создать группу |
 | `POST` | `/api/v1/groups/invitations` | Пригласить участника |
 | `POST` | `/api/v1/messages/read` | Отметить сообщение прочитанным |
+
+С ядром, поддерживающим устойчивую очередь, успешный ответ означает, что текст
+и зашифрованные вложения уже сохранены в SQLite для фоновой доставки и повтора
+после перезапуска. Ошибки получателя, чтения вложения и записи возвращаются в
+HTTP-ответе. Это подтверждение приёма ботом, а не доставки получателю.
 
 Пример отправки сообщения:
 
@@ -95,9 +102,20 @@ curl -H "Authorization: Bearer $BOT_API_TOKEN" \
   http://localhost:8081/api/v1/files
 ```
 
-Принятые файлы сохраняются с правами `0640` в `BOT_API_UPLOAD_DIR`, потому что
-ядро может читать их асинхронно после HTTP-ответа. Очистку старых uploads должен
-выполнять оператор после подтверждения доставки.
+Принятые файлы сохраняются с правами `0640` в `BOT_API_UPLOAD_DIR`; путь также
+остаётся в локальной истории. Новое ядро сохраняет зашифрованные чанки до
+успешного ответа, поэтому повтор доставки не зависит от исходного файла.
+При использовании старого release ядро может читать upload асинхронно;
+очистку uploads должен выполнять оператор с учётом версии ядра.
+
+Проверка адаптера с локально пересобранным ядром:
+
+```bash
+HUGINN_CORE_TEST_LIBRARY=/absolute/path/libhuginn_messenger.so go test ./...
+```
+
+Исправления доставки в исходниках ядра появятся в обычной сборке Bot API после
+публикации соответствующего release либо при подключении локальной библиотеки.
 
 ## Конфигурация
 
@@ -107,7 +125,7 @@ curl -H "Authorization: Bearer $BOT_API_TOKEN" \
 | `HUGINN_USERNAME` | обязательна |
 | `BOT_API_ADDR` | `:8081` |
 | `HUGINN_CORE_LIBRARY` | `build/libhuginn_messenger.so` |
-| `MUNINN_ADDR` | `https://muninn.evil-bread.ru` |
+| `MUNINN_ADDR` | обязательна, URL с `http://` или `https://` |
 | `HUGINN_DB_PATH` | `data/huginn.db` |
 | `HUGINN_CHUNK_TTL` | `1w` |
 | `BOT_API_UPLOAD_DIR` | `data/uploads` |
