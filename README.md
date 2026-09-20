@@ -7,12 +7,10 @@
 значение зафиксировано в коде и не переопределяется environment-переменными или
 ранее сохранённой конфигурацией.
 
-Ядро подключено как версионированная библиотечная зависимость без Git
-submodule. При сборке последняя версия автоматически определяется через Go
-module proxy, после чего скачивается готовая shared library из GitHub Release
-`github.com/killbane1232/huginn-messenger`. Архив проверяется по опубликованному
-`SHA256SUMS`, а адаптер `internal/core` загружает через `dlopen` совместимый
-C ABI-вход с явным `peer_flag`.
+Ядро подключено как Git submodule `third_party/huginn-messenger` с
+`branch = main`. Перед сборкой `make` обновляет исходники до последнего
+коммита `main` и компилирует shared library. Адаптер `internal/core` загружает
+через `dlopen` совместимый C ABI-вход с явным `peer_flag`.
 
 ## Быстрый запуск
 
@@ -20,8 +18,8 @@ C ABI-вход с явным `peer_flag`.
 git clone https://github.com/killbane1232/huginn-bot-api.git
 cd huginn-bot-api
 cp .env.example .env
-# задайте BOT_API_TOKEN и HUGINN_USERNAME
-docker compose up --build
+# задайте BOT_API_TOKEN, HUGINN_USERNAME и MUNINN_ADDR
+make docker-up
 ```
 
 При запуске контейнер исправляет владельца persistent volume `/app/data`, а
@@ -29,7 +27,11 @@ docker compose up --build
 `10001`. Это позволяет повторно использовать volume, ранее созданный с
 владельцем `root`, без удаления базы и ключей.
 
-Локальная сборка требует Go 1.25+, GCC, Linux и `curl`:
+`make docker-up` обновляет submodule и запускает `docker compose up --build`.
+На хосте нужны Git, Make и Docker Compose; ядро и Bot API компилируются внутри
+Docker для целевой архитектуры.
+
+Локальная сборка требует Go 1.25+, GCC, Linux, Git и Make:
 
 ```bash
 make all
@@ -105,17 +107,17 @@ curl -H "Authorization: Bearer $BOT_API_TOKEN" \
 Принятые файлы сохраняются с правами `0640` в `BOT_API_UPLOAD_DIR`; путь также
 остаётся в локальной истории. Новое ядро сохраняет зашифрованные чанки до
 успешного ответа, поэтому повтор доставки не зависит от исходного файла.
-При использовании старого release ядро может читать upload асинхронно;
-очистку uploads должен выполнять оператор с учётом версии ядра.
+Очистку uploads должен выполнять оператор с учётом используемой версии ядра.
 
 Проверка адаптера с локально пересобранным ядром:
 
 ```bash
-HUGINN_CORE_TEST_LIBRARY=/absolute/path/libhuginn_messenger.so go test ./...
+make test-native
 ```
 
-Исправления доставки в исходниках ядра появятся в обычной сборке Bot API после
-публикации соответствующего release либо при подключении локальной библиотеки.
+Исправления доставки попадут в следующую сборку Bot API после их включения
+в `main` ядра. `make test-native` обновляет и собирает ядро, затем запускает
+Go-тесты, включая проверку реального C ABI через `HUGINN_CORE_TEST_LIBRARY`.
 
 ## Конфигурация
 
@@ -134,7 +136,8 @@ HUGINN_CORE_TEST_LIBRARY=/absolute/path/libhuginn_messenger.so go test ./...
 | `HUGINN_TURN_PASS` | пусто |
 
 Если контейнер завершался с SQLite-ошибкой `unable to open database file (14)`,
-пересоберите и перезапустите его: `docker compose up -d --build`. Новый
+пересоберите и перезапустите его:
+`make core-update && docker compose up -d --build`. Новый
 entrypoint восстановит права существующего `bot-data`; удалять volume не нужно.
 
 ## Разработка
@@ -143,27 +146,42 @@ entrypoint восстановит права существующего `bot-dat
 go fmt ./...
 go test ./...
 make all
+make test-native
 git diff --check
 ```
 
 ## Docker image
 
-GitHub Actions workflow `.github/workflows/docker-publish.yml` проверяет Bot API,
-собирает библиотеку Go-ядра, затем собирает образ для `linux/amd64` и
-`linux/arm64`. На pull
+GitHub Actions workflow `.github/workflows/docker-publish.yml` получает последний
+`main` ядра, компилирует библиотеку и проверяет Bot API с ней, затем собирает
+образ для `linux/amd64` и `linux/arm64` из того же проверенного коммита ядра.
+На pull
 request выполняется только сборка. Push в `main`, version-тег `v*.*.*` или
 ручной запуск публикует образ в `ghcr.io/<owner>/<repository>` с тегами
 `latest` для основной ветки, версией для Git-тега и неизменяемым `sha-*`.
 
-Последняя опубликованная версия ядра подтягивается автоматически:
+Последний `main` ядра подтягивается автоматически при каждом запуске:
 
 ```bash
 make all
+make docker-build
+make docker-up
 ```
 
-Для воспроизводимой сборки можно явно задать версию; `GOPROXY` настраивает адрес
-Go proxy:
+Git сохраняет SHA подмодуля, но сборочные команды выполняют
+`git submodule update --init --recursive --remote --checkout`, поэтому
+используют свежий `main`. Фактический SHA выводится в лог. При локальных
+изменениях ядра или ошибке Git сборка останавливается; для обновления нужен
+доступ к upstream.
+
+Dockerfile компилирует исходники из build context. Если вызываете Docker
+напрямую, сначала обновите submodule:
 
 ```bash
-HUGINN_CORE_VERSION=v0.2.0 make all
+make core-update
+docker compose up --build
 ```
+
+Релизные архивы ядра больше не используются. В CI SHA передаётся между заданиями
+только в пределах текущего запуска, чтобы тесты и оба образа использовали
+одинаковые исходники, даже если `main` обновится во время сборки.
